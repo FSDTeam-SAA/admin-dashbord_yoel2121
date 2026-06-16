@@ -38,7 +38,7 @@ function LoginContent() {
     setLoading(false);
 
     if (result?.error) {
-      toast.error("Login failed", { description: "Check admin credentials and approval status." });
+      toast.error("Login failed", { description: result.error });
       return;
     }
     toast.success("Logged in successfully");

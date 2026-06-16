@@ -1,6 +1,6 @@
 import NextAuth, { type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { loginAdmin } from "@/lib/api";
+import { getApiMessage, loginAdmin } from "@/lib/api";
 
 export const authOptions: NextAuthOptions = {
   session: {
@@ -18,12 +18,18 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials.password) return null;
-        const response = await loginAdmin({
-          email: credentials.email,
-          password: credentials.password,
-        });
+        let response;
+        try {
+          response = await loginAdmin({
+            email: credentials.email,
+            password: credentials.password,
+          });
+        } catch (error) {
+          throw new Error(getApiMessage(error));
+        }
 
-        if (!response.success || response.data.role !== "admin") return null;
+        if (!response.success) throw new Error(response.message || "Login failed");
+        if (response.data.role !== "admin") throw new Error("Only admin accounts can access this dashboard");
 
         return {
           id: response.data._id,

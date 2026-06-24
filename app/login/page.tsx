@@ -26,14 +26,31 @@ function LoginContent() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
+  function getCallbackUrl() {
+    const callbackUrl = params.get("callbackUrl");
+    if (!callbackUrl) return "/dashboard";
+
+    try {
+      const url = new URL(callbackUrl, window.location.origin);
+      const isSameHost = url.hostname === window.location.hostname;
+      const isLoginPage = url.pathname === "/login";
+
+      if (!isSameHost || isLoginPage) return "/dashboard";
+      return `${url.pathname}${url.search}${url.hash}`;
+    } catch {
+      return "/dashboard";
+    }
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
+    const callbackUrl = getCallbackUrl();
     const result = await signIn("credentials", {
       email,
       password,
       redirect: false,
-      callbackUrl: params.get("callbackUrl") || "/dashboard",
+      callbackUrl,
     });
     setLoading(false);
 
@@ -42,7 +59,8 @@ function LoginContent() {
       return;
     }
     toast.success("Logged in successfully");
-    router.push(result?.url || "/dashboard");
+    router.replace(callbackUrl);
+    router.refresh();
   }
 
   return (

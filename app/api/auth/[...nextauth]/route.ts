@@ -46,6 +46,20 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+
+      try {
+        const redirectUrl = new URL(url);
+        const appUrl = new URL(baseUrl);
+
+        if (redirectUrl.hostname === appUrl.hostname) return url;
+      } catch {
+        return `${baseUrl}/dashboard`;
+      }
+
+      return `${baseUrl}/dashboard`;
+    },
     async jwt({ token, user }) {
       if (user) {
         const authUser = user as typeof user & {

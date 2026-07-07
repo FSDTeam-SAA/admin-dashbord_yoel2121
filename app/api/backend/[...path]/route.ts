@@ -21,13 +21,29 @@ async function proxy(request: NextRequest, context: RouteContext) {
   const headers = new Headers(request.headers);
   headers.delete("host");
   headers.delete("connection");
+  headers.delete("content-length");
+  headers.delete("accept-encoding");
+  headers.delete("transfer-encoding");
 
-  const response = await fetch(targetUrl, {
-    method: request.method,
-    headers,
-    body: ["GET", "HEAD"].includes(request.method) ? undefined : await request.arrayBuffer(),
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(targetUrl, {
+      method: request.method,
+      headers,
+      body: ["GET", "HEAD"].includes(request.method) ? undefined : await request.arrayBuffer(),
+      cache: "no-store",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Backend request failed";
+    return NextResponse.json(
+      {
+        success: false,
+        message: `Unable to reach backend at ${targetUrl.origin}`,
+        error: message,
+      },
+      { status: 502 },
+    );
+  }
 
   const responseHeaders = new Headers(response.headers);
   responseHeaders.delete("content-encoding");

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   Grid2X2,
+  Images,
   LogOut,
   Menu,
   Search,
@@ -25,6 +26,7 @@ const nav = [
   { href: "/users", label: "User List", icon: Users },
   { href: "/tradespeople", label: "Tradesperson List", icon: Users },
   { href: "/category", label: "Category", icon: WalletCards },
+  { href: "/carousels", label: "Carousels", icon: Images },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

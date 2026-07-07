@@ -24,6 +24,19 @@ export type Category = {
   createdAt?: string;
 };
 
+export type CarouselItem = {
+  _id: string;
+  type: "ad" | "coupon";
+  title: string;
+  subtitle: string;
+  image?: ProfileImage;
+  link?: string;
+  discountPercentage?: number | null;
+  order?: number;
+  isActive?: boolean;
+  createdAt?: string;
+};
+
 export type AdminUser = {
   _id: string;
   name?: string;
@@ -207,6 +220,67 @@ export async function updateCategoryStatus(categoryId: string, status: "approved
 
 export async function deleteCategory(categoryId: string) {
   const response = await api.delete<ApiEnvelope<Record<string, never>>>(`/admin/categories/${categoryId}`);
+  return unwrap(response);
+}
+
+export async function listCarousels(params?: { type?: string; isActive?: string }) {
+  const response = await api.get<ApiEnvelope<CarouselItem[]>>("/admin/carousels", { params });
+  return unwrap(response);
+}
+
+export async function createCarouselItem(payload: {
+  type: "ad" | "coupon";
+  title: string;
+  subtitle: string;
+  link?: string;
+  discountPercentage?: string;
+  order?: string;
+  isActive: boolean;
+  image: File;
+}) {
+  const formData = new FormData();
+  formData.append("type", payload.type);
+  formData.append("title", payload.title);
+  formData.append("subtitle", payload.subtitle);
+  formData.append("link", payload.link || "");
+  formData.append("order", payload.order || "0");
+  formData.append("isActive", String(payload.isActive));
+  if (payload.type === "coupon") formData.append("discountPercentage", payload.discountPercentage || "");
+  formData.append("image", payload.image);
+
+  const response = await api.post<ApiEnvelope<CarouselItem>>("/admin/carousels", formData);
+  return unwrap(response);
+}
+
+export async function updateCarouselItem(
+  carouselId: string,
+  payload: {
+    type: "ad" | "coupon";
+    title: string;
+    subtitle: string;
+    link?: string;
+    discountPercentage?: string;
+    order?: string;
+    isActive: boolean;
+    image?: File | null;
+  },
+) {
+  const formData = new FormData();
+  formData.append("type", payload.type);
+  formData.append("title", payload.title);
+  formData.append("subtitle", payload.subtitle);
+  formData.append("link", payload.link || "");
+  formData.append("order", payload.order || "0");
+  formData.append("isActive", String(payload.isActive));
+  if (payload.type === "coupon") formData.append("discountPercentage", payload.discountPercentage || "");
+  if (payload.image) formData.append("image", payload.image);
+
+  const response = await api.patch<ApiEnvelope<CarouselItem>>(`/admin/carousels/${carouselId}`, formData);
+  return unwrap(response);
+}
+
+export async function deleteCarouselItem(carouselId: string) {
+  const response = await api.delete<ApiEnvelope<Record<string, never>>>(`/admin/carousels/${carouselId}`);
   return unwrap(response);
 }
 

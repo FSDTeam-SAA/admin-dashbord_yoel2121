@@ -24,10 +24,31 @@ export function splitName(name?: string) {
 }
 
 export function pageItems<T>(items: T[], page: number, perPage: number) {
-  const start = (page - 1) * perPage;
+  const totalPages = Math.max(1, Math.ceil(items.length / perPage));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * perPage;
   return items.slice(start, start + perPage);
 }
 
 export function formatCount(value: number | undefined) {
-  return new Intl.NumberFormat("en-US").format(value || 0);
+  return new Intl.NumberFormat("en-US").format(value ?? 0);
+}
+
+export function formatCurrency(value: number | undefined, currency = "USD") {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(value ?? 0);
+}
+
+export function formatDate(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
 }

@@ -5,10 +5,25 @@ export default withAuth({
     signIn: "/login",
   },
   callbacks: {
-    authorized: ({ token }) => Boolean(token?.accessToken && token?.role === "admin"),
+    authorized: ({ token }) =>
+      Boolean(
+        token?.accessToken &&
+          token?.refreshToken &&
+          token?.role === "admin" &&
+          !token?.error,
+      ),
   },
 });
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/users/:path*", "/tradespeople/:path*", "/category/:path*", "/settings/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/users/:path*",
+    "/tradespeople/:path*",
+    "/category/:path*",
+    "/carousels/:path*",
+    "/terms-of-service/:path*",
+    "/privacy-policy/:path*",
+    "/settings/:path*",
+  ],
 };

@@ -21,6 +21,7 @@ export type Category = {
   _id: string;
   name: string;
   status?: "pending" | "approved" | "rejected";
+  image?: ProfileImage;
   createdAt?: string;
 };
 
@@ -41,7 +42,7 @@ export type AdminUser = {
   _id: string;
   name?: string;
   email: string;
-  role: "admin" | "user" | "tradesperson";
+  role: "admin" | "user" | "homeowner" | "tradesperson";
   phone?: string;
   address?: string;
   bio?: string;
@@ -65,9 +66,18 @@ export type Overview = {
     tradespeople: number;
     users: number;
     jobs: number;
+    earnings: number;
+  };
+  today: {
+    tradespeople: number;
+    users: number;
+    jobs: number;
+    earnings: number;
   };
   jobsByDay: Array<{ label: string; count: number }>;
   userGrowth: Array<{ label: string; tradies: number; users: number }>;
+  monthlyRevenue: Array<{ month: string; label: string; revenue: number; value: number }>;
+  topServices: Array<{ name: string; count: number; value: number; earnings: number }>;
 };
 
 export type Application = {
@@ -75,6 +85,7 @@ export type Application = {
   status?: string;
   price?: number;
   additionalInfo?: string;
+  userId?: AdminUser;
   tradespersonId?: AdminUser;
   jobId?: {
     _id: string;
@@ -82,7 +93,7 @@ export type Application = {
     locationText?: string;
     status?: string;
     visibility?: string;
-    relatedFiles?: string[];
+    media?: string[];
   };
   createdAt?: string;
 };
@@ -92,11 +103,19 @@ export type ProfilePayload = {
   tradiesReview?: unknown;
 };
 
-type TokenGetter = () => string | undefined | Promise<string | undefined>;
+export type LegalDocumentType = "terms-of-service" | "privacy-policy";
 
-let tokenGetter: TokenGetter | undefined;
+export type LegalDocument = {
+  type: LegalDocumentType;
+  title: string;
+  content: string;
+  version: number;
+  publishedAt?: string | null;
+  updatedAt?: string | null;
+};
 
 const baseURL =
+  process.env.BACKEND_BASE_URL ||
   process.env.NEXT_PUBLIC_BASE_URL ||
   process.env.NEXTPUBLICBASEURL ||
   "http://localhost:5006/api/v1";
@@ -111,18 +130,6 @@ export const api = axios.create({
 export const publicApi = axios.create({
   baseURL: typeof window === "undefined" ? baseURL : browserBaseURL,
   withCredentials: true,
-});
-
-export function setAccessTokenGetter(getter: TokenGetter) {
-  tokenGetter = getter;
-}
-
-api.interceptors.request.use(async (config) => {
-  const token = await tokenGetter?.();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
 });
 
 function unwrap<T>(response: { data: ApiEnvelope<T> }) {
@@ -143,7 +150,7 @@ export async function loginAdmin(payload: { email: string; password: string }) {
 }
 
 export async function forgotPassword(email: string) {
-  const response = await publicApi.post<ApiEnvelope<{ otp?: number | string; email?: string } | null>>(
+  const response = await publicApi.post<ApiEnvelope<null>>(
     "/auth/forget",
     { email },
   );
@@ -193,8 +200,29 @@ export async function listUsers(params?: { role?: string; status?: string; q?: s
   return unwrap(response);
 }
 
-export async function updateUserStatus(userId: string, action: "approve" | "reject" | "suspend") {
-  const response = await api.patch<ApiEnvelope<AdminUser>>(`/admin/users/${userId}/status`, { action });
+export async function getAdminUser(userId: string) {
+  const response = await api.get<ApiEnvelope<AdminUser>>(`/admin/users/${userId}`);
+  return unwrap(response);
+}
+
+export async function updateTradespersonStatus(userId: string, action: "approve" | "reject" | "suspend") {
+  const response = await api.patch<ApiEnvelope<AdminUser>>(`/admin/tradespeople/${userId}/status`, { action });
+  return unwrap(response);
+}
+
+export async function getLegalDocument(type: LegalDocumentType) {
+  const response = await api.get<ApiEnvelope<LegalDocument>>(`/admin/legal-documents/${type}`);
+  return unwrap(response);
+}
+
+export async function updateLegalDocument(
+  type: LegalDocumentType,
+  payload: { title: string; content: string },
+) {
+  const response = await api.put<ApiEnvelope<LegalDocument>>(
+    `/admin/legal-documents/${type}`,
+    payload,
+  );
   return unwrap(response);
 }
 
@@ -208,13 +236,32 @@ export async function listCategories(params?: { status?: string }) {
   return unwrap(response);
 }
 
-export async function proposeCategory(name: string) {
-  const response = await api.post<ApiEnvelope<Category>>("/categories/propose", { name });
+export async function createCategory(payload: {
+  name: string;
+  status: "approved" | "pending" | "rejected";
+  image: File;
+}) {
+  const formData = new FormData();
+  formData.append("name", payload.name);
+  formData.append("status", payload.status);
+  formData.append("image", payload.image);
+  const response = await api.post<ApiEnvelope<Category>>("/admin/categories", formData);
   return unwrap(response);
 }
 
-export async function updateCategoryStatus(categoryId: string, status: "approved" | "rejected" | "pending") {
-  const response = await api.patch<ApiEnvelope<Category>>(`/admin/categories/${categoryId}`, { status });
+export async function updateCategory(
+  categoryId: string,
+  payload: {
+    name?: string;
+    status?: "approved" | "rejected" | "pending";
+    image?: File;
+  },
+) {
+  const formData = new FormData();
+  if (payload.name !== undefined) formData.append("name", payload.name);
+  if (payload.status !== undefined) formData.append("status", payload.status);
+  if (payload.image) formData.append("image", payload.image);
+  const response = await api.patch<ApiEnvelope<Category>>(`/admin/categories/${categoryId}`, formData);
   return unwrap(response);
 }
 

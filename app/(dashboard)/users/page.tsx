@@ -8,7 +8,7 @@ import { UserTable } from "@/components/dashboard/user-table";
 
 export default function UsersPage() {
   return (
-    <Suspense fallback={<section className="mx-auto max-w-[1560px]" />}>
+    <Suspense fallback={<section className="mx-auto max-w-[1560px]"><div className="h-16" /></section>}>
       <UsersContent />
     </Suspense>
   );
@@ -25,7 +25,17 @@ function UsersContent() {
 
   return (
     <section className="mx-auto max-w-[1560px]">
-      <UserTable users={usersQuery.data || []} loading={usersQuery.isLoading} profileBasePath="/users" queryKey={["admin-users"]} />
+      <UserTable
+        users={usersQuery.data || []}
+        loading={usersQuery.isLoading}
+        error={usersQuery.isError}
+        onRetry={() => usersQuery.refetch()}
+        profileBasePath="/users"
+        queryKey={["admin-users"]}
+        title="Customers"
+        kind="user"
+        searchQuery={q}
+      />
     </section>
   );
 }

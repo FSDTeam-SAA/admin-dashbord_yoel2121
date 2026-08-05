@@ -11,7 +11,7 @@ export function Badge({ children, tone, className }: { children: React.ReactNode
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-[6px] px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold capitalize ring-1 ring-inset",
         styles[tone || ""] || "bg-blue-50 text-blue-700 ring-blue-200",
         className,
       )}

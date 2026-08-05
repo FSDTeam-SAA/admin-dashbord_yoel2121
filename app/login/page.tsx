@@ -13,7 +13,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<AuthPanel title="Login To Your Account"><div className="h-[245px]" /></AuthPanel>}>
+    <Suspense fallback={<AuthPanel title="Sign in to your account"><div className="h-[245px]" aria-hidden="true" /></AuthPanel>}>
       <LoginContent />
     </Suspense>
   );
@@ -46,47 +46,72 @@ function LoginContent() {
     event.preventDefault();
     setLoading(true);
     const callbackUrl = getCallbackUrl();
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-      callbackUrl,
-    });
-    setLoading(false);
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+        callbackUrl,
+      });
 
-    if (result?.error) {
-      toast.error("Login failed", { description: result.error });
-      return;
+      if (result?.error) {
+        toast.error("Login failed", { description: result.error });
+        return;
+      }
+      toast.success("Logged in successfully");
+      router.replace(callbackUrl);
+      router.refresh();
+    } catch {
+      toast.error("Login failed", { description: "The authentication service is unavailable. Try again." });
+    } finally {
+      setLoading(false);
     }
-    toast.success("Logged in successfully");
-    router.replace(callbackUrl);
-    router.refresh();
   }
 
   return (
-    <AuthPanel title="Login To Your Account">
-      <form onSubmit={onSubmit} className="mx-auto flex w-full max-w-[496px] flex-col gap-6">
-        <label className="relative block">
-          <Mail className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-primary" />
-          <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" className="h-[53px] pl-12" required />
+    <AuthPanel title="Sign in to your account">
+      <form onSubmit={onSubmit} className="mx-auto flex w-full max-w-[460px] flex-col gap-5">
+        <label htmlFor="login-email" className="block space-y-2">
+          <span className="text-sm font-semibold text-[#263e57]">Email address</span>
+          <span className="relative block">
+            <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-primary" aria-hidden="true" />
+            <Input
+              id="login-email"
+              name="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="admin@example.com"
+              autoComplete="email"
+              className="h-[52px] pl-12"
+              required
+            />
+          </span>
         </label>
         <div>
-          <label className="block">
+          <label htmlFor="login-password" className="block space-y-2">
+            <span className="text-sm font-semibold text-[#263e57]">Password</span>
             <PasswordInput
+              id="login-password"
+              name="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Password"
-              className="h-[53px]"
-              leftIcon={<LockKeyhole className="h-5 w-5 text-primary" />}
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              className="h-[52px]"
+              leftIcon={<LockKeyhole className="h-5 w-5 text-primary" aria-hidden="true" />}
               required
             />
           </label>
-          <Link href="/forgot-password" className="mt-3 block text-right text-sm text-primary">
+          <Link
+            href="/forgot-password"
+            className="mt-3 block rounded text-right text-sm font-semibold text-[#175b91] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#53b7f3]"
+          >
             Forgot Password?
           </Link>
         </div>
-        <Button type="submit" disabled={loading} className="mt-4 h-[51px]">
-          {loading ? "Logging in..." : "Login"}
+        <Button type="submit" disabled={loading} aria-busy={loading} className="mt-3 h-[52px] text-base">
+          {loading ? "Signing in..." : "Sign in"}
         </Button>
       </form>
     </AuthPanel>

@@ -1,10 +1,13 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
-import { ImageUp, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ImageUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Pagination } from "@/components/dashboard/pagination";
+import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
+import { DashboardModal } from "@/components/dashboard/dashboard-modal";
+import { QueryError } from "@/components/dashboard/query-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,7 +50,7 @@ function formFromItem(item: CarouselItem): CarouselForm {
     title: item.title || "",
     subtitle: item.subtitle || "",
     link: item.link || "",
-    discountPercentage: item.discountPercentage ? String(item.discountPercentage) : "",
+    discountPercentage: item.discountPercentage != null ? String(item.discountPercentage) : "",
     order: String(item.order || 0),
     isActive: item.isActive !== false,
   };
@@ -80,12 +83,9 @@ export default function CarouselsPage() {
     () => [...(carouselsQuery.data || [])].sort((first, second) => (first.order || 0) - (second.order || 0)),
     [carouselsQuery.data],
   );
-  const visibleItems = useMemo(() => pageItems(orderedItems, page, 8), [orderedItems, page]);
-
-  useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(orderedItems.length / 8));
-    if (page > totalPages) setPage(totalPages);
-  }, [orderedItems.length, page]);
+  const totalPages = Math.max(1, Math.ceil(orderedItems.length / 8));
+  const safePage = Math.min(page, totalPages);
+  const visibleItems = useMemo(() => pageItems(orderedItems, safePage, 8), [orderedItems, safePage]);
 
   const createMutation = useMutation({
     mutationFn: createCarouselItem,
@@ -145,6 +145,14 @@ export default function CarouselsPage() {
 
   function onImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] || null;
+    if (file && !file.type.startsWith("image/")) {
+      event.target.value = "";
+      return toast.error("Choose a valid image file");
+    }
+    if (file && file.size > 5 * 1024 * 1024) {
+      event.target.value = "";
+      return toast.error("Image must be 5 MB or smaller");
+    }
     setImage(file);
     setFileName(file?.name || "");
     if (previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
@@ -156,6 +164,12 @@ export default function CarouselsPage() {
     if (!form.title.trim()) return toast.error("Title is required");
     if (!form.subtitle.trim()) return toast.error("Subtitle is required");
     if (form.type === "coupon" && !form.discountPercentage.trim()) return toast.error("Discount percentage is required");
+    const discount = Number(form.discountPercentage);
+    if (form.type === "coupon" && (!Number.isFinite(discount) || discount < 0 || discount > 100)) {
+      return toast.error("Discount percentage must be between 0 and 100");
+    }
+    const order = Number(form.order || 0);
+    if (!Number.isInteger(order) || order < 0) return toast.error("Order must be a whole number of 0 or more");
     if (createOpen && !image) return toast.error("Image is required");
 
     const payload = {
@@ -181,11 +195,15 @@ export default function CarouselsPage() {
 
   return (
     <section className="mx-auto max-w-[1510px]">
-      <div className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-[36px] font-bold max-md:text-3xl">Carousels</h1>
-        <Button type="button" onClick={openCreateModal} className="h-12 w-[170px] text-base max-sm:w-full">
-          <Plus className="h-5 w-5" />
-          Add Carousel
+      <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-primary">Content</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Carousels</h1>
+          <p className="mt-2 text-sm text-slate-600">Manage promotional banners and coupons shown to customers.</p>
+        </div>
+        <Button type="button" onClick={openCreateModal} className="w-full sm:w-auto">
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Add carousel
         </Button>
       </div>
 
@@ -195,27 +213,32 @@ export default function CarouselsPage() {
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
         </div>
+      ) : carouselsQuery.isError ? (
+        <QueryError title="Couldn't load carousel items" onRetry={() => carouselsQuery.refetch()} />
       ) : (
-        <div className="overflow-x-auto rounded-[8px] border border-[#d7d7d7]">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[980px] text-left">
-            <thead className="border-b bg-[#f8fbfd] text-[#666]">
+            <thead className="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-5 py-4 font-normal">Image</th>
-                <th className="px-5 py-4 font-normal">Title</th>
-                <th className="px-5 py-4 font-normal">Type</th>
-                <th className="px-5 py-4 font-normal">Discount</th>
-                <th className="px-5 py-4 font-normal">Order</th>
-                <th className="px-5 py-4 font-normal">Status</th>
-                <th className="px-5 py-4 text-right font-normal">Action</th>
+                <th scope="col" className="px-5 py-4">Image</th>
+                <th scope="col" className="px-5 py-4">Title</th>
+                <th scope="col" className="px-5 py-4">Type</th>
+                <th scope="col" className="px-5 py-4">Discount</th>
+                <th scope="col" className="px-5 py-4">Order</th>
+                <th scope="col" className="px-5 py-4">Status</th>
+                <th scope="col" className="px-5 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {visibleItems.map((item) => (
-                <tr key={item._id} className="border-b last:border-b-0">
+                <tr key={item._id} className="border-b border-slate-100 transition last:border-b-0 hover:bg-slate-50/70">
                   <td className="px-5 py-5">
                     <div
                       className="h-14 w-24 rounded-[6px] bg-[#e7f6ff] bg-cover bg-center"
                       style={item.image?.url ? { backgroundImage: `url(${item.image.url})` } : undefined}
+                      role="img"
+                      aria-label={item.image?.url ? `${item.title} preview` : "Image not provided"}
                     />
                   </td>
                   <td className="px-5 py-5">
@@ -223,18 +246,18 @@ export default function CarouselsPage() {
                     <div className="mt-1 max-w-[360px] truncate text-sm text-[#666]">{item.subtitle}</div>
                   </td>
                   <td className="px-5 py-5 capitalize">{item.type}</td>
-                  <td className="px-5 py-5">{item.type === "coupon" ? `${item.discountPercentage || 0}%` : "-"}</td>
-                  <td className="px-5 py-5">{item.order || 0}</td>
+                  <td className="px-5 py-5">{item.type === "coupon" ? `${item.discountPercentage ?? 0}%` : "-"}</td>
+                  <td className="px-5 py-5">{item.order ?? 0}</td>
                   <td className="px-5 py-5">
                     <Badge tone={item.isActive ? "approved" : "suspended"}>{item.isActive ? "active" : "inactive"}</Badge>
                   </td>
                   <td className="px-5 py-5">
                     <div className="flex justify-end gap-2">
                       <Button type="button" size="icon" variant="ghost" onClick={() => openEditModal(item)} aria-label="Edit carousel item">
-                        <Pencil className="h-5 w-5 text-[#2e73b8]" />
+                        <Pencil className="h-5 w-5 text-primary" aria-hidden="true" />
                       </Button>
                       <Button type="button" size="icon" variant="ghost" onClick={() => setDeleteItem(item)} aria-label="Delete carousel item">
-                        <Trash2 className="h-5 w-5 text-[#ff1f2d]" />
+                        <Trash2 className="h-5 w-5 text-red-600" aria-hidden="true" />
                       </Button>
                     </div>
                   </td>
@@ -249,8 +272,40 @@ export default function CarouselsPage() {
               )}
             </tbody>
           </table>
+          </div>
+          <div className="divide-y divide-slate-100 md:hidden">
+            {visibleItems.map((item) => (
+              <article key={item._id} className="p-4">
+                <div className="flex gap-3">
+                  <div
+                    className="h-16 w-24 shrink-0 rounded-lg bg-blue-50 bg-cover bg-center"
+                    style={item.image?.url ? { backgroundImage: `url(${item.image.url})` } : undefined}
+                    role="img"
+                    aria-label={item.image?.url ? `${item.title} preview` : "Image not provided"}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="truncate font-bold text-slate-950">{item.title}</h2>
+                      <Badge tone={item.isActive ? "approved" : "suspended"}>{item.isActive ? "active" : "inactive"}</Badge>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-sm text-slate-600">{item.subtitle}</p>
+                    <p className="mt-2 text-xs capitalize text-slate-500">{item.type}{item.type === "coupon" ? ` / ${item.discountPercentage ?? 0}% off` : ""} / order {item.order ?? 0}</p>
+                  </div>
+                </div>
+                <div className="mt-4 flex justify-end gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => openEditModal(item)}>
+                    <Pencil className="h-4 w-4" aria-hidden="true" /> Edit
+                  </Button>
+                  <Button type="button" size="icon" variant="ghost" onClick={() => setDeleteItem(item)} aria-label={`Delete ${item.title}`}>
+                    <Trash2 className="h-5 w-5 text-red-600" aria-hidden="true" />
+                  </Button>
+                </div>
+              </article>
+            ))}
+            {!orderedItems.length ? <p className="p-10 text-center text-sm text-slate-600">No carousel items found.</p> : null}
+          </div>
           <div className="px-5 pb-5">
-            <Pagination page={page} total={orderedItems.length} perPage={8} onPageChange={setPage} />
+            <Pagination page={safePage} total={orderedItems.length} perPage={8} onPageChange={setPage} />
           </div>
         </div>
       )}
@@ -271,8 +326,13 @@ export default function CarouselsPage() {
       )}
 
       {deleteItem && (
-        <ConfirmDeleteModal
-          title={deleteItem.title}
+        <ConfirmDialog
+          open
+          title="Delete carousel item?"
+          description={`"${deleteItem.title}" will be permanently removed from the carousel.`}
+          confirmLabel="Delete item"
+          busyLabel="Deleting..."
+          destructive
           busy={deleteMutation.isPending}
           onClose={() => setDeleteItem(null)}
           onConfirm={() => deleteMutation.mutate(deleteItem._id)}
@@ -306,38 +366,33 @@ function FormModal({
   onSubmit: (event: FormEvent) => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/45 px-4 py-8">
-      <div className="w-full max-w-[860px] rounded-[8px] bg-white p-5 shadow-2xl md:p-6">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <h2 className="text-[24px] font-bold">{title}</h2>
-          <Button type="button" size="icon" variant="ghost" onClick={onClose} aria-label="Close modal">
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
+    <DashboardModal open title={title} description="Use a clear image and concise copy for the customer-facing carousel." busy={busy} onClose={onClose} maxWidth="max-w-[860px]">
         <form onSubmit={onSubmit} className="grid gap-5 md:grid-cols-2">
           <Field label="Type">
             <select
+              name="type"
               value={form.type}
               onChange={(event) => onChange((current) => ({ ...current, type: event.target.value as CarouselType }))}
-              className="h-11 w-full rounded-[6px] border border-[#c9c9c9] bg-white px-4 text-sm outline-none transition focus:border-[#2fa7f0]"
+              className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
               <option value="ad">Ad</option>
               <option value="coupon">Coupon</option>
             </select>
           </Field>
           <Field label="Title">
-            <Input value={form.title} onChange={(event) => onChange((current) => ({ ...current, title: event.target.value }))} />
+            <Input name="title" maxLength={100} required value={form.title} onChange={(event) => onChange((current) => ({ ...current, title: event.target.value }))} />
           </Field>
           <Field label="Subtitle">
-            <Input value={form.subtitle} onChange={(event) => onChange((current) => ({ ...current, subtitle: event.target.value }))} />
+            <Input name="subtitle" maxLength={180} required value={form.subtitle} onChange={(event) => onChange((current) => ({ ...current, subtitle: event.target.value }))} />
           </Field>
           <Field label="Link">
-            <Input value={form.link} onChange={(event) => onChange((current) => ({ ...current, link: event.target.value }))} />
+            <Input name="link" type="text" placeholder="/offers or https://example.com" value={form.link} onChange={(event) => onChange((current) => ({ ...current, link: event.target.value }))} />
           </Field>
           {form.type === "coupon" && (
             <Field label="Discount Percentage">
               <Input
                 type="number"
+                name="discountPercentage"
                 min="0"
                 max="100"
                 value={form.discountPercentage}
@@ -346,73 +401,44 @@ function FormModal({
             </Field>
           )}
           <Field label="Order">
-            <Input type="number" value={form.order} onChange={(event) => onChange((current) => ({ ...current, order: event.target.value }))} />
+            <Input name="order" type="number" min="0" step="1" value={form.order} onChange={(event) => onChange((current) => ({ ...current, order: event.target.value }))} />
           </Field>
           <label className="flex items-center gap-3 text-lg">
             <input
               type="checkbox"
               checked={form.isActive}
               onChange={(event) => onChange((current) => ({ ...current, isActive: event.target.checked }))}
-              className="h-5 w-5 accent-[#2e73b8]"
+              name="isActive"
+              className="h-5 w-5 accent-primary"
             />
             Active
           </label>
-          <label className="flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-[6px] border border-dashed border-[#26a9f4] bg-[#181818] px-5 py-5 text-center text-white md:col-span-2">
+          <label className="flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-blue-300 bg-blue-50/50 px-5 py-5 text-center text-slate-800 transition hover:border-primary hover:bg-blue-50 focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 md:col-span-2">
             {previewUrl ? (
-              <img src={previewUrl} alt="Carousel preview" className="mb-4 h-[116px] w-full max-w-[260px] rounded-[6px] object-cover" />
+              <div className="mb-4 h-[116px] w-full max-w-[260px] rounded-lg bg-cover bg-center shadow-sm" style={{ backgroundImage: `url(${previewUrl})` }} role="img" aria-label="Carousel image preview" />
             ) : (
-              <ImageUp className="mb-4 h-10 w-10" />
+              <ImageUp className="mb-4 h-10 w-10 text-primary" aria-hidden="true" />
             )}
-            <span className="text-base">Drop your files here</span>
-            <span className="mt-5 max-w-full break-all text-base font-semibold">{fileName || "Choose File"}</span>
-            <input type="file" accept="image/*" onChange={onImage} className="sr-only" />
+            <span className="text-base font-semibold">{fileName || (previewUrl ? "Replace image" : "Choose an image")}</span>
+            <span className="mt-1 text-xs text-slate-500">PNG, JPG or WebP / up to 5 MB</span>
+            <input type="file" name="image" accept="image/png,image/jpeg,image/webp" onChange={onImage} className="sr-only" />
           </label>
-          <div className="flex justify-end gap-3 md:col-span-2">
-            <Button type="button" variant="outline" className="w-[110px]" onClick={onClose}>
+          <div className="flex flex-col-reverse justify-end gap-3 border-t border-slate-100 pt-5 sm:flex-row md:col-span-2">
+            <Button type="button" variant="outline" className="w-full sm:w-[110px]" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy} className="w-[150px]">
+            <Button type="submit" disabled={busy} className="w-full sm:w-[150px]">
               {busy ? "Saving..." : submitText}
             </Button>
           </div>
         </form>
-      </div>
-    </div>
-  );
-}
-
-function ConfirmDeleteModal({
-  title,
-  busy,
-  onClose,
-  onConfirm,
-}: {
-  title: string;
-  busy: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
-      <div className="w-full max-w-[430px] rounded-[8px] bg-white p-6 shadow-2xl">
-        <h2 className="text-[24px] font-bold">Delete Carousel?</h2>
-        <p className="mt-3 text-base text-[#555]">Are you sure you want to delete {title}?</p>
-        <div className="mt-8 flex justify-end gap-3">
-          <Button type="button" variant="outline" className="w-[96px]" onClick={onClose}>
-            No
-          </Button>
-          <Button type="button" variant="destructive" className="w-[96px]" onClick={onConfirm} disabled={busy}>
-            {busy ? "Deleting..." : "Yes"}
-          </Button>
-        </div>
-      </div>
-    </div>
+    </DashboardModal>
   );
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="space-y-2 text-lg">
+    <label className="space-y-2 text-sm font-semibold text-slate-700">
       <span>{label}</span>
       {children}
     </label>

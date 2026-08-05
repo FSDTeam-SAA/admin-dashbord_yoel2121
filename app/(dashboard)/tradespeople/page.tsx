@@ -25,7 +25,17 @@ function TradespeopleContent() {
 
   return (
     <section className="mx-auto max-w-[1560px]">
-      <UserTable users={usersQuery.data || []} loading={usersQuery.isLoading} profileBasePath="/tradespeople" queryKey={["admin-users"]} />
+      <UserTable
+        users={usersQuery.data || []}
+        loading={usersQuery.isLoading}
+        error={usersQuery.isError}
+        onRetry={() => usersQuery.refetch()}
+        profileBasePath="/tradespeople"
+        queryKey={["admin-users"]}
+        title="Tradespeople"
+        kind="tradesperson"
+        searchQuery={q}
+      />
     </section>
   );
 }

@@ -3,22 +3,22 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex h-11 items-center justify-center gap-2 rounded-[6px] px-4 text-sm font-semibold transition-colors disabled:pointer-events-none disabled:opacity-60",
+  "inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-[background-color,border-color,color,box-shadow,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#53b7f3] focus-visible:ring-offset-2 active:translate-y-px disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-55",
   {
     variants: {
       variant: {
-        default: "bg-primary text-white hover:bg-[#286aaa]",
-        secondary: "bg-[#bfeeff] text-black hover:bg-[#aee6fb]",
-        outline: "border border-primary bg-white text-[#2fa7f0] hover:bg-[#eef9ff]",
-        ghost: "bg-transparent hover:bg-black/5",
-        destructive: "bg-[#d81218] text-white hover:bg-[#bd1015]",
-        success: "bg-[#078b34] text-white hover:bg-[#067b2e]",
+        default: "bg-primary text-white shadow-sm hover:bg-primary-dark",
+        secondary: "bg-[#d7efff] text-[#0a3157] hover:bg-[#c1e3fb]",
+        outline: "border border-[#246ba8] bg-white text-[#174f7f] hover:bg-[#edf6fc]",
+        ghost: "bg-transparent text-current hover:bg-black/5",
+        destructive: "bg-[#c51c2e] text-white shadow-sm hover:bg-[#a91525]",
+        success: "bg-[#08783a] text-white shadow-sm hover:bg-[#05652f]",
       },
       size: {
         default: "h-11 px-4",
         sm: "h-9 px-3",
         lg: "h-14 px-8 text-base",
-        icon: "h-10 w-10 px-0",
+        icon: "h-11 w-11 px-0",
       },
     },
     defaultVariants: {

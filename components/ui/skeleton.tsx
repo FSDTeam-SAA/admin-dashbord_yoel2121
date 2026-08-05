@@ -1,5 +1,6 @@
+import * as React from "react";
 import { cn } from "@/lib/utils";
 
-export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-[6px] bg-[#e8eef4]", className)} />;
+export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div aria-hidden="true" className={cn("animate-pulse rounded-lg bg-[#e4ebf2] motion-reduce:animate-none", className)} {...props} />;
 }

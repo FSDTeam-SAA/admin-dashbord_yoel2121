@@ -1,99 +1,194 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
+import { ArrowLeft, Ban, Check, Mail, MapPin, Phone, X } from "lucide-react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AdminUser, getApiMessage, listUsers, updateUserStatus } from "@/lib/api";
+import { getAdminUser, getApiMessage, updateTradespersonStatus } from "@/lib/api";
 import { Avatar } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
-import { splitName } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
+import { QueryError } from "@/components/dashboard/query-state";
+import { formatDate } from "@/lib/utils";
+
+type StatusAction = "approve" | "reject" | "suspend";
 
 export function ProfileDetail({ role, title }: { role: "user" | "tradesperson"; title: string }) {
   const params = useParams<{ id: string }>();
-  const queryClient = useQueryClient();
-  const usersQuery = useQuery({
-    queryKey: ["admin-users", role],
-    queryFn: () => listUsers({ role }),
+  const userQuery = useQuery({
+    queryKey: ["admin-user", params.id],
+    queryFn: () => getAdminUser(params.id),
     select: (response) => response.data,
+    enabled: Boolean(params.id),
   });
-  const user = usersQuery.data?.find((item) => item._id === params.id);
-  const names = splitName(user?.name);
-  const statusMutation = useMutation({
-    mutationFn: (action: "approve" | "reject") => updateUserStatus(params.id, action),
-    onSuccess: (response) => {
-      toast.success(response.message);
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-    },
-    onError: (error) => toast.error(getApiMessage(error)),
-  });
+  const user = userQuery.data;
 
-  if (usersQuery.isLoading) return <ProfileSkeleton title={title} />;
-  if (!user) return <p className="text-lg font-semibold">Profile not found.</p>;
+  if (userQuery.isLoading) return <ProfileSkeleton title={title} />;
+  if (userQuery.isError) {
+    return <QueryError title="Couldn't load this profile" onRetry={() => userQuery.refetch()} />;
+  }
+
+  const roleMatches = user && (role === "tradesperson" ? user.role === "tradesperson" : user.role === "user" || user.role === "homeowner");
+  if (!roleMatches) {
+    return (
+      <section className="mx-auto max-w-6xl">
+        <QueryError title="Profile not found" message="This account may have been removed or the profile link is invalid." />
+      </section>
+    );
+  }
+
+  const trades = Array.isArray(user.operatingTrades)
+    ? user.operatingTrades.map((trade) => (typeof trade === "string" ? trade : trade.name)).filter(Boolean).join(", ")
+    : "";
+  const status = user.accountStatus || "unknown";
 
   return (
-    <section className="mx-auto max-w-[1650px]">
-      <h1 className="mb-16 text-[36px] font-bold max-md:mb-8 max-md:text-3xl">{title}</h1>
-      <Card className="mb-10">
-        <CardContent className="flex min-h-[166px] items-center gap-4 px-5 md:px-8">
-          <Avatar name={user.name} src={user.profileImage?.url} size={126} />
-          <h2 className="text-[28px] font-bold max-sm:text-xl">{user.name || "Unnamed user"}</h2>
+    <section className="mx-auto max-w-6xl">
+      <Link
+        href={role === "tradesperson" ? "/tradespeople" : "/users"}
+        className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        Back to {role === "tradesperson" ? "tradespeople" : "customers"}
+      </Link>
+
+      <div className="mb-7">
+        <p className="text-sm font-semibold uppercase tracking-[0.14em] text-primary">Account details</p>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">{title}</h1>
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="h-24 bg-gradient-to-r from-[#0b2c52] via-[#13558c] to-[#2f73b7] sm:h-32" />
+        <CardContent className="relative p-5 pt-0 sm:p-7 sm:pt-0">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end">
+              <div className="-mt-10 rounded-full border-4 border-white bg-white shadow-sm sm:-mt-12">
+                <Avatar name={user.name} src={user.profileImage?.url} size={96} />
+              </div>
+              <div className="min-w-0 pb-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="truncate text-2xl font-bold text-slate-950">{user.name || "Unnamed account"}</h2>
+                  {role === "tradesperson" ? <Badge tone={status}>{status}</Badge> : null}
+                </div>
+                <p className="mt-1 text-sm capitalize text-slate-500">{user.role === "homeowner" ? "Customer" : user.role}</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-500">Joined {formatDate(user.createdAt)}</p>
+          </div>
         </CardContent>
       </Card>
-      <Card>
-        <CardContent className="p-5 md:p-6">
-          <h2 className="mb-9 text-[28px] font-bold max-sm:text-xl">User Information</h2>
-          <ReadOnlyFields user={user} firstName={names.firstName} lastName={names.lastName} />
-        </CardContent>
-      </Card>
-      <div className="mt-20 flex gap-6 max-sm:mt-8 max-sm:flex-col">
-        <Button type="button" variant="success" size="lg" className="w-[210px] max-sm:w-full" onClick={() => statusMutation.mutate("approve")} disabled={statusMutation.isPending}>
-          Approve
-        </Button>
-        <Button type="button" variant="destructive" size="lg" className="w-[210px] max-sm:w-full" onClick={() => statusMutation.mutate("reject")} disabled={statusMutation.isPending}>
-          Reject
-        </Button>
+
+      <div className={role === "tradesperson" ? "mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.7fr)]" : "mt-6"}>
+        <Card>
+          <CardContent className="p-5 sm:p-7">
+            <h2 className="text-xl font-bold text-slate-950">{role === "tradesperson" ? "Tradesperson information" : "Customer information"}</h2>
+            <dl className="mt-6 grid gap-6 sm:grid-cols-2">
+              <InfoItem icon={Mail} label="Email" value={user.email} />
+              <InfoItem icon={Phone} label="Phone" value={user.phone} />
+              <InfoItem icon={MapPin} label="Address" value={user.address} />
+              {role === "tradesperson" ? <InfoItem label="Services" value={trades} /> : null}
+              {role === "tradesperson" ? <InfoItem label="Service area" value={user.serviceArea} /> : null}
+              <div className="sm:col-span-2">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bio</dt>
+                <dd className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{user.bio?.trim() || "Not provided"}</dd>
+              </div>
+            </dl>
+          </CardContent>
+        </Card>
+
+        {role === "tradesperson" ? <TradespersonActions userId={params.id} status={status} /> : null}
       </div>
     </section>
   );
 }
 
-function ReadOnlyFields({ user, firstName, lastName }: { user: AdminUser; firstName: string; lastName: string }) {
+function TradespersonActions({ userId, status }: { userId: string; status: string }) {
+  const queryClient = useQueryClient();
+  const [confirmAction, setConfirmAction] = useState<"reject" | "suspend" | null>(null);
+  const statusMutation = useMutation({
+    mutationFn: (action: StatusAction) => updateTradespersonStatus(userId, action),
+    onSuccess: (response) => {
+      toast.success(response.message);
+      setConfirmAction(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-user", userId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+    onError: (error) => toast.error(getApiMessage(error)),
+  });
+
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <label className="space-y-2 text-lg">
-        <span>First Name</span>
-        <Input value={firstName || "Mr"} readOnly />
-      </label>
-      <label className="space-y-2 text-lg">
-        <span>Last Name</span>
-        <Input value={lastName || "Raja"} readOnly />
-      </label>
-      <label className="space-y-2 text-lg">
-        <span>Email Address</span>
-        <Input value={user.email} readOnly />
-      </label>
-      <label className="space-y-2 text-lg">
-        <span>Phone</span>
-        <Input value={user.phone || "(307) 555-0133"} readOnly />
-      </label>
-      <label className="space-y-2 text-lg md:col-span-2">
-        <span>Bio</span>
-        <Textarea value={user.bio || "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."} readOnly className="min-h-[151px]" />
-      </label>
+    <>
+      <Card>
+        <CardContent className="p-5 sm:p-7">
+          <h2 className="text-xl font-bold text-slate-950">Account actions</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Update access for this tradesperson. The account owner will be notified.</p>
+          <div className="mt-6 flex flex-col gap-3">
+            {status !== "approved" ? (
+              <Button type="button" variant="success" onClick={() => statusMutation.mutate("approve")} disabled={statusMutation.isPending}>
+                <Check className="h-4 w-4" aria-hidden="true" />
+                Approve account
+              </Button>
+            ) : (
+              <Button type="button" variant="outline" onClick={() => setConfirmAction("suspend")} disabled={statusMutation.isPending}>
+                <Ban className="h-4 w-4" aria-hidden="true" />
+                Suspend account
+              </Button>
+            )}
+            {status === "pending" ? (
+              <Button type="button" variant="destructive" onClick={() => setConfirmAction("reject")} disabled={statusMutation.isPending}>
+                <X className="h-4 w-4" aria-hidden="true" />
+                Reject application
+              </Button>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+
+      <ConfirmDialog
+        open={Boolean(confirmAction)}
+        title={confirmAction === "suspend" ? "Suspend this tradesperson?" : "Reject this application?"}
+        description={
+          confirmAction === "suspend"
+            ? "The account will immediately lose access until an admin approves it again."
+            : "The tradesperson application will be rejected and the owner will be notified."
+        }
+        confirmLabel={confirmAction === "suspend" ? "Suspend account" : "Reject application"}
+        busyLabel="Updating..."
+        destructive
+        busy={statusMutation.isPending}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction && statusMutation.mutate(confirmAction)}
+      />
+    </>
+  );
+}
+
+function InfoItem({ icon: Icon, label, value }: { icon?: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>; label: string; value?: string }) {
+  return (
+    <div>
+      <dt className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {Icon ? <Icon className="h-4 w-4" aria-hidden={true} /> : null}
+        {label}
+      </dt>
+      <dd className="mt-2 break-words text-sm font-medium text-slate-800">{value?.trim() || "Not provided"}</dd>
     </div>
   );
 }
 
 function ProfileSkeleton({ title }: { title: string }) {
   return (
-    <section>
-      <h1 className="mb-16 text-[36px] font-bold">{title}</h1>
-      <Skeleton className="mb-10 h-[166px] w-full" />
-      <Skeleton className="h-[505px] w-full" />
+    <section className="mx-auto max-w-6xl">
+      <h1 className="mb-7 text-3xl font-bold">{title}</h1>
+      <Skeleton className="h-64 w-full rounded-2xl" />
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <Skeleton className="h-80 w-full rounded-2xl" />
+        <Skeleton className="h-80 w-full rounded-2xl" />
+      </div>
     </section>
   );
 }

@@ -1,23 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useQuery } from "@tanstack/react-query";
+import { BriefcaseBusiness, CircleDollarSign, Users, Wrench } from "lucide-react";
 import { getOverview, listApplications } from "@/lib/api";
 import { Avatar } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/dashboard/pagination";
-import { formatCount, pageItems } from "@/lib/utils";
+import { EmptyState, QueryError } from "@/components/dashboard/query-state";
+import { formatCount, formatCurrency, formatDate, pageItems } from "@/lib/utils";
 
-const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-const fallbackRevenue = [15500, 11800, 19000, 21400, 20100, 19800, 13600, 23100, 21300, 18400, 27400, 30500];
+const chartColors = ["#2f73b7", "#67a9df", "#9bc9ed", "#c7e3f6", "#e2eff9"];
+const emptySubscribe = () => () => undefined;
 
 export default function DashboardPage() {
   const [page, setPage] = useState(1);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const isClient = useSyncExternalStore(emptySubscribe, () => true, () => false);
   const overviewQuery = useQuery({
     queryKey: ["admin-overview"],
     queryFn: getOverview,
@@ -29,143 +30,211 @@ export default function DashboardPage() {
     select: (response) => response.data,
   });
 
-  const stats = overviewQuery.data?.stats;
-  const revenueData = useMemo(
-    () =>
-      months.map((month, index) => ({
-        month,
-        value: fallbackRevenue[index] + (overviewQuery.data?.jobsByDay[index % 7]?.count || 0) * 250,
-      })),
-    [overviewQuery.data?.jobsByDay],
-  );
+  const overview = overviewQuery.data;
   const recent = applicationsQuery.data || [];
-  const visibleRecent = pageItems(recent, page, 3);
+  const totalPages = Math.max(1, Math.ceil(recent.length / 5));
+  const safePage = Math.min(page, totalPages);
+  const visibleRecent = pageItems(recent, safePage, 5);
+  const monthlyRevenue = overview?.monthlyRevenue || [];
+  const topServices = overview?.topServices || [];
 
   return (
     <section className="mx-auto max-w-[1640px] space-y-6">
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Total Users" value={stats?.users} delta="+2,123 today" loading={overviewQuery.isLoading} />
-        <StatCard title="Total Tradespersons" value={stats?.tradespeople} delta="+2 today" loading={overviewQuery.isLoading} />
-        <StatCard title="Total Orders" value={stats?.jobs} delta="+2,123 today" loading={overviewQuery.isLoading} />
-        <StatCard title="Total Earnings" value={12832} prefix="$ " delta="$2,123 today" loading={overviewQuery.isLoading} />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-primary">Overview</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Dashboard</h1>
+          <p className="mt-2 text-sm text-slate-600">Live marketplace activity and account performance.</p>
+        </div>
+        <span className="w-fit rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-primary">Updated from live data</span>
       </div>
 
+      {overviewQuery.isError ? (
+        <QueryError title="Couldn't load dashboard metrics" onRetry={() => overviewQuery.refetch()} />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            title="Customers"
+            value={overview?.stats.users}
+            delta={overview?.today.users}
+            deltaLabel="new today"
+            loading={overviewQuery.isLoading}
+            icon={Users}
+          />
+          <StatCard
+            title="Tradespeople"
+            value={overview?.stats.tradespeople}
+            delta={overview?.today.tradespeople}
+            deltaLabel="new today"
+            loading={overviewQuery.isLoading}
+            icon={Wrench}
+          />
+          <StatCard
+            title="Jobs"
+            value={overview?.stats.jobs}
+            delta={overview?.today.jobs}
+            deltaLabel="created today"
+            loading={overviewQuery.isLoading}
+            icon={BriefcaseBusiness}
+          />
+          <StatCard
+            title="Revenue"
+            value={overview?.stats.earnings}
+            delta={overview?.today.earnings}
+            deltaLabel="earned today"
+            loading={overviewQuery.isLoading}
+            icon={CircleDollarSign}
+            currency
+          />
+        </div>
+      )}
+
       <Card>
-        <CardContent className="p-5">
-          <div className="mb-5 flex items-start justify-between gap-4">
+        <CardContent className="p-5 sm:p-6">
+          <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-[24px] font-bold">Revenue</h2>
-              <p className="mt-3 text-xl font-bold">$86,400.12</p>
+              <p className="text-sm font-semibold text-slate-500">Payment performance</p>
+              <h2 className="mt-1 text-xl font-bold text-slate-950 sm:text-2xl">Revenue</h2>
+              <p className="mt-2 text-2xl font-bold text-primary">{formatCurrency(overview?.stats.earnings)}</p>
             </div>
-            <Button type="button" size="sm" className="min-w-[90px]">Month</Button>
+            <span className="w-fit rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">Last 12 months</span>
           </div>
-          <div className="h-[340px] w-full">
-            {overviewQuery.isLoading || !mounted ? (
-              <Skeleton className="h-full w-full" />
-            ) : (
+          <div className="h-[280px] w-full sm:h-[340px]">
+            {overviewQuery.isLoading || !isClient ? (
+              <Skeleton className="h-full w-full rounded-xl" />
+            ) : monthlyRevenue.length ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={revenueData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <AreaChart data={monthlyRevenue} margin={{ top: 10, right: 10, left: -16, bottom: 0 }}>
                   <defs>
                     <linearGradient id="revenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#2f73b7" stopOpacity={0.9} />
-                      <stop offset="95%" stopColor="#ddecfb" stopOpacity={0.4} />
+                      <stop offset="5%" stopColor="#2f73b7" stopOpacity={0.45} />
+                      <stop offset="95%" stopColor="#2f73b7" stopOpacity={0.03} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#d7d7d7" />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                  <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `${Number(value) / 1000}K`} />
-                  <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
-                  <Area type="monotone" dataKey="value" stroke="#2f73b7" strokeWidth={0} fill="url(#revenue)" />
+                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#64748b", fontSize: 12 }} />
+                  <YAxis tickLine={false} axisLine={false} tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => `$${Number(value).toLocaleString()}`} />
+                  <Tooltip formatter={(value) => [formatCurrency(Number(value)), "Revenue"]} />
+                  <Area type="monotone" dataKey="value" stroke="#2f73b7" strokeWidth={3} fill="url(#revenue)" />
                 </AreaChart>
               </ResponsiveContainer>
+            ) : (
+              <EmptyState title="No revenue yet" message="Successful payments will populate this chart." />
             )}
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_405px]">
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_420px]">
         <Card>
-          <CardContent className="p-5">
-            <div className="mb-8 flex justify-between">
-              <h2 className="text-[24px] font-bold">Recent Activity</h2>
-              <Button type="button" size="sm">Last 24h</Button>
+          <CardContent className="p-0">
+            <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:px-6">
+              <div>
+                <h2 className="text-xl font-bold text-slate-950 sm:text-2xl">Recent applications</h2>
+                <p className="mt-1 text-sm text-slate-500">Latest quotes submitted across jobs.</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{recent.length} total</span>
             </div>
             {applicationsQuery.isLoading ? (
-              <div className="space-y-4">
-                <Skeleton className="h-14 w-full" />
-                <Skeleton className="h-14 w-full" />
-                <Skeleton className="h-14 w-full" />
+              <div className="space-y-3 p-5 sm:p-6">
+                {Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-16 w-full" />)}
               </div>
+            ) : applicationsQuery.isError ? (
+              <div className="p-5 sm:p-6"><QueryError title="Couldn't load recent applications" onRetry={() => applicationsQuery.refetch()} /></div>
+            ) : recent.length === 0 ? (
+              <div className="p-5 sm:p-6"><EmptyState title="No applications yet" message="New job applications will appear here." /></div>
             ) : (
               <>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[760px] text-left">
-                    <thead className="text-sm text-[#777]">
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full min-w-[780px] text-left">
+                    <thead className="bg-slate-50/80 text-xs font-semibold uppercase tracking-wide text-slate-500">
                       <tr>
-                        <th className="pb-5 font-normal">Customer</th>
-                        <th className="pb-5 font-normal">Tradesperson</th>
-                        <th className="pb-5 font-normal">Service</th>
-                        <th className="pb-5 font-normal">Service Amount</th>
-                        <th className="pb-5 font-normal">Date</th>
+                        <th scope="col" className="px-5 py-4 sm:px-6">Customer</th>
+                        <th scope="col" className="px-5 py-4">Tradesperson</th>
+                        <th scope="col" className="px-5 py-4">Service</th>
+                        <th scope="col" className="px-5 py-4">Quote</th>
+                        <th scope="col" className="px-5 py-4">Status</th>
+                        <th scope="col" className="px-5 py-4">Date</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-slate-100">
                       {visibleRecent.map((item) => (
-                        <tr key={item._id}>
-                          <td className="py-3">
-                            <div className="flex items-center gap-3">
-                              <Avatar name="Customer" size={38} />
-                              <span>Savannah Nguyen</span>
-                            </div>
+                        <tr key={item._id} className="transition hover:bg-slate-50/70">
+                          <td className="px-5 py-4 sm:px-6">
+                            <Person name={item.userId?.name} email={item.userId?.email} src={item.userId?.profileImage?.url} fallback="Unknown customer" />
                           </td>
-                          <td className="py-3">
-                            <div className="flex items-center gap-3">
-                              <Avatar name={item.tradespersonId?.name} src={item.tradespersonId?.profileImage?.url} size={38} />
-                              <span>{item.tradespersonId?.name || "Leslie Alexander"}</span>
-                            </div>
+                          <td className="px-5 py-4">
+                            <Person name={item.tradespersonId?.name} email={item.tradespersonId?.email} src={item.tradespersonId?.profileImage?.url} fallback="Unknown tradesperson" />
                           </td>
-                          <td className="py-3 font-bold">{item.jobId?.title || "Plumber"}</td>
-                          <td className="py-3 font-bold">${item.price || 124}</td>
-                          <td className="py-3">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "12-12-2025"}</td>
+                          <td className="max-w-52 truncate px-5 py-4 text-sm font-semibold text-slate-800">{item.jobId?.title || "Untitled job"}</td>
+                          <td className="px-5 py-4 text-sm font-semibold text-slate-800">{formatCurrency(item.price)}</td>
+                          <td className="px-5 py-4"><Badge tone={item.status}>{item.status || "unknown"}</Badge></td>
+                          <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600">{formatDate(item.createdAt)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <Pagination page={page} total={recent.length} perPage={3} onPageChange={setPage} />
+
+                <div className="divide-y divide-slate-100 md:hidden">
+                  {visibleRecent.map((item) => (
+                    <article key={item._id} className="p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <Person name={item.tradespersonId?.name} email={item.tradespersonId?.email} src={item.tradespersonId?.profileImage?.url} fallback="Unknown tradesperson" />
+                        <Badge tone={item.status}>{item.status || "unknown"}</Badge>
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                        <Metric label="Job" value={item.jobId?.title || "Untitled job"} />
+                        <Metric label="Quote" value={formatCurrency(item.price)} />
+                        <Metric label="Customer" value={item.userId?.name || item.userId?.email || "Unknown"} />
+                        <Metric label="Date" value={formatDate(item.createdAt)} />
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                <div className="border-t border-slate-100 px-5 pb-5 sm:px-6">
+                  <Pagination page={safePage} total={recent.length} perPage={5} onPageChange={setPage} />
+                </div>
               </>
             )}
           </CardContent>
         </Card>
+
         <Card>
-          <CardContent className="p-5">
-            <div className="mb-6 flex items-start justify-between gap-3">
-              <h2 className="text-[24px] font-bold">Top Performing Services</h2>
-              <Button type="button" size="sm">All time</Button>
+          <CardContent className="p-5 sm:p-6">
+            <div>
+              <h2 className="text-xl font-bold text-slate-950 sm:text-2xl">Top services</h2>
+              <p className="mt-1 text-sm text-slate-500">Jobs grouped by service category.</p>
             </div>
-            <div className="h-[260px]">
-              {mounted ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={[{ name: "Plumber", value: 55 }, { name: "Cleaner", value: 25 }, { name: "Painting", value: 20 }]} dataKey="value" innerRadius={70} outerRadius={110} paddingAngle={2}>
-                      {["#2f73b7", "#a9d4fb", "#deebf8"].map((color) => (
-                        <Cell key={color} fill={color} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <Skeleton className="h-full w-full" />
-              )}
-            </div>
-            <div className="flex flex-wrap justify-between gap-3 text-sm">
-              {["Plumber", "Cleaner", "Painting"].map((label, index) => (
-                <span key={label} className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full" style={{ background: ["#2f73b7", "#a9d4fb", "#deebf8"][index] }} />
-                  {label}
-                </span>
-              ))}
-            </div>
+            {overviewQuery.isLoading || !isClient ? (
+              <Skeleton className="mt-6 h-72 w-full rounded-xl" />
+            ) : topServices.length ? (
+              <>
+                <div className="mt-4 h-[250px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={topServices} dataKey="count" nameKey="name" innerRadius={64} outerRadius={100} paddingAngle={3}>
+                        {topServices.map((item, index) => <Cell key={item.name} fill={chartColors[index % chartColors.length]} />)}
+                      </Pie>
+                      <Tooltip formatter={(value) => [formatCount(Number(value)), "Jobs"]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-3">
+                  {topServices.map((item, index) => (
+                    <div key={item.name} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="flex min-w-0 items-center gap-2 text-slate-700">
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: chartColors[index % chartColors.length] }} />
+                        <span className="truncate">{item.name}</span>
+                      </span>
+                      <span className="font-bold text-slate-950">{formatCount(item.count)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="mt-6"><EmptyState title="No service data yet" message="Services will rank here after jobs are posted." /></div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -173,14 +242,60 @@ export default function DashboardPage() {
   );
 }
 
-function StatCard({ title, value, delta, prefix = "", loading }: { title: string; value?: number; delta: string; prefix?: string; loading: boolean }) {
+function StatCard({
+  title,
+  value,
+  delta,
+  deltaLabel,
+  loading,
+  icon: Icon,
+  currency = false,
+}: {
+  title: string;
+  value?: number;
+  delta?: number;
+  deltaLabel: string;
+  loading: boolean;
+  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  currency?: boolean;
+}) {
   return (
-    <Card>
-      <CardContent className="flex h-[142px] flex-col justify-between p-5">
-        <h2 className="text-lg font-bold">{title}</h2>
-        {loading ? <Skeleton className="h-7 w-28" /> : <p className="text-2xl font-bold text-primary">{prefix}{formatCount(value)}</p>}
-        <p className="text-right text-sm font-semibold text-[#555]">{delta}</p>
+    <Card className="overflow-hidden">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-500">{title}</p>
+            {loading ? <Skeleton className="mt-3 h-8 w-28" /> : <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950">{currency ? formatCurrency(value) : formatCount(value)}</p>}
+          </div>
+          <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-primary">
+            <Icon className="h-5 w-5" aria-hidden={true} />
+          </span>
+        </div>
+        <p className="mt-5 text-xs font-medium text-slate-500">
+          <span className="font-bold text-emerald-700">+{currency ? formatCurrency(delta) : formatCount(delta)}</span> {deltaLabel}
+        </p>
       </CardContent>
     </Card>
+  );
+}
+
+function Person({ name, email, src, fallback }: { name?: string; email?: string; src?: string; fallback: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <Avatar name={name || email} src={src} size={38} />
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-slate-900">{name || fallback}</p>
+        {email ? <p className="truncate text-xs text-slate-500">{email}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 line-clamp-2 font-medium text-slate-800">{value}</p>
+    </div>
   );
 }
